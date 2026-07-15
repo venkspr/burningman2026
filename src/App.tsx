@@ -163,110 +163,79 @@ export default function App() {
         <div className="map-section-header">
           <h2>Black Rock City 2026</h2>
           <p>
-            Pins follow your current filter ({mapCamps.length} with addresses).
-            Official 2026 placement data is not public yet — treat pins as
-            provisional.
+            Search and filter first — pins update live ({mapCamps.length} with
+            addresses). Official 2026 placement data is not public yet — treat
+            pins as provisional.
           </p>
         </div>
 
-        <CityMap camps={mapCamps} onOpenCamp={setSelected} />
-
-        {placedCamps.length > 0 && filters.acceptingOnly === false && (
-          <div className="map-placed">
-            <h3>All known addresses ({placedCamps.length})</h3>
-            <ul className="placed-list">
-              {placedCamps.slice(0, 40).map((camp) => (
-                <li key={camp.id}>
-                  <button type="button" onClick={() => setSelected(camp)}>
-                    <span>{camp.name}</span>
-                    <span className="placed-loc">{camp.placement}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-            {placedCamps.length > 40 && (
-              <p className="city-map-hint">
-                Showing 40 of {placedCamps.length} — use search/filters for the rest.
-              </p>
-            )}
-          </div>
-        )}
-      </section>
-
-      <p className="disclaimer">
-        <strong>Unofficial guide.</strong> Listings from{" "}
-        <a
-          href="https://burningman.org/black-rock-city/black-rock-city-2026/2026-camps/"
-          target="_blank"
-          rel="noreferrer"
-        >
-          burningman.org
-        </a>
-        ; addresses mostly from Playa Info (may be prior-year). Official 2026
-        pins ~Aug 23.{" "}
-        <a href="mailto:placement@burningman.org">placement@burningman.org</a>
-      </p>
-
-      <div className="browse" id="browse">
-        <aside className="filters">
-          <h2>Filter</h2>
-
-          <div className="filter-group">
-            <label htmlFor="search">Search</label>
-            <input
-              id="search"
-              type="search"
-              placeholder="slushies, queer, Reno…"
-              value={filters.query}
-              onChange={(e) => update("query", e.target.value)}
-            />
-          </div>
-
-          <div className="filter-group">
-            <span className="filter-label">Camp supplies</span>
-            <select
-              value={filters.amenity}
-              onChange={(e) =>
-                update(
-                  "amenity",
-                  e.target.value as Filters["amenity"],
-                )
-              }
-            >
-              <option value="">Any amenity</option>
-              {(Object.keys(AMENITY_LABELS) as (keyof CampAmenities)[]).map(
-                (k) => (
+        <aside className="filters map-filters" aria-label="Camp filters">
+          <div className="map-filters-top">
+            <div className="filter-group map-filters-search">
+              <label htmlFor="search">Search</label>
+              <input
+                id="search"
+                type="search"
+                placeholder="slushies, queer, Reno…"
+                value={filters.query}
+                onChange={(e) => update("query", e.target.value)}
+              />
+            </div>
+            <div className="filter-group">
+              <span className="filter-label">Camp supplies</span>
+              <select
+                value={filters.amenity}
+                onChange={(e) =>
+                  update("amenity", e.target.value as Filters["amenity"])
+                }
+              >
+                <option value="">Any amenity</option>
+                {(
+                  Object.keys(AMENITY_LABELS) as (keyof CampAmenities)[]
+                ).map((k) => (
                   <option key={k} value={k}>
                     {AMENITY_LABELS[k]}
                   </option>
-                ),
-              )}
-            </select>
-          </div>
-
-          <div className="filter-group">
-            <label htmlFor="maxDues">Max dues ($)</label>
-            <input
-              id="maxDues"
-              type="number"
-              min={0}
-              step={50}
-              placeholder="e.g. 500"
-              value={filters.maxDues}
-              onChange={(e) => update("maxDues", e.target.value)}
-            />
-          </div>
-
-          <div className="filter-group">
-            <label htmlFor="maxSize">Max camp size</label>
-            <input
-              id="maxSize"
-              type="number"
-              min={0}
-              placeholder="e.g. 40"
-              value={filters.maxSize}
-              onChange={(e) => update("maxSize", e.target.value)}
-            />
+                ))}
+              </select>
+            </div>
+            <div className="filter-group">
+              <label htmlFor="maxDues">Max dues ($)</label>
+              <input
+                id="maxDues"
+                type="number"
+                min={0}
+                step={50}
+                placeholder="e.g. 500"
+                value={filters.maxDues}
+                onChange={(e) => update("maxDues", e.target.value)}
+              />
+            </div>
+            <div className="filter-group">
+              <label htmlFor="maxSize">Max camp size</label>
+              <input
+                id="maxSize"
+                type="number"
+                min={0}
+                placeholder="e.g. 40"
+                value={filters.maxSize}
+                onChange={(e) => update("maxSize", e.target.value)}
+              />
+            </div>
+            <div className="filter-group">
+              <span className="filter-label">Sort list</span>
+              <select
+                className="sort-select"
+                value={sort}
+                onChange={(e) => setSort(e.target.value as SortKey)}
+              >
+                <option value="name">A–Z</option>
+                <option value="dues-asc">Dues ↑</option>
+                <option value="dues-desc">Dues ↓</option>
+                <option value="size-asc">Size ↑</option>
+                <option value="size-desc">Size ↓</option>
+              </select>
+            </div>
           </div>
 
           <div className="filter-group">
@@ -317,7 +286,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="filter-group">
+          <div className="map-filters-actions">
             <button
               type="button"
               className={`chip ${filters.acceptingOnly ? "active" : ""}`}
@@ -333,45 +302,76 @@ export default function App() {
               onClick={() =>
                 update("placementOnly", !filters.placementOnly)
               }
-              style={{ marginLeft: "0.35rem" }}
             >
               Has address
             </button>
+            <button
+              type="button"
+              className="clear-filters clear-filters-inline"
+              onClick={() => setFilters(defaultFilters)}
+            >
+              Clear filters
+            </button>
+            <p className="map-filters-count">
+              <span>{filtered.length}</span> camps ·{" "}
+              <span>{mapCamps.length}</span> on map
+            </p>
           </div>
-
-          <button
-            type="button"
-            className="clear-filters"
-            onClick={() => setFilters(defaultFilters)}
-          >
-            Clear all filters
-          </button>
         </aside>
 
+        <CityMap camps={mapCamps} onOpenCamp={setSelected} />
+
+        {placedCamps.length > 0 && filters.acceptingOnly === false && (
+          <div className="map-placed">
+            <h3>All known addresses ({placedCamps.length})</h3>
+            <ul className="placed-list">
+              {placedCamps.slice(0, 40).map((camp) => (
+                <li key={camp.id}>
+                  <button type="button" onClick={() => setSelected(camp)}>
+                    <span>{camp.name}</span>
+                    <span className="placed-loc">{camp.placement}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {placedCamps.length > 40 && (
+              <p className="city-map-hint">
+                Showing 40 of {placedCamps.length} — use search/filters for the
+                rest.
+              </p>
+            )}
+          </div>
+        )}
+      </section>
+
+      <p className="disclaimer">
+        <strong>Unofficial guide.</strong> Listings from{" "}
+        <a
+          href="https://burningman.org/black-rock-city/black-rock-city-2026/2026-camps/"
+          target="_blank"
+          rel="noreferrer"
+        >
+          burningman.org
+        </a>
+        ; addresses mostly from Playa Info (may be prior-year). Official 2026
+        pins ~Aug 23.{" "}
+        <a href="mailto:placement@burningman.org">placement@burningman.org</a>
+      </p>
+
+      <div className="browse browse-results-only" id="browse">
         <main className="results">
           <div className="results-bar">
             <h2 className="results-count">
-              <span>{filtered.length}</span> camps
+              <span>{filtered.length}</span> camps matching filters
             </h2>
-            <label>
-              <span className="visually-hidden">Sort</span>
-              <select
-                className="sort-select"
-                value={sort}
-                onChange={(e) => setSort(e.target.value as SortKey)}
-              >
-                <option value="name">A–Z</option>
-                <option value="dues-asc">Dues ↑</option>
-                <option value="dues-desc">Dues ↓</option>
-                <option value="size-asc">Size ↑</option>
-                <option value="size-desc">Size ↓</option>
-              </select>
-            </label>
           </div>
 
           {filtered.length === 0 ? (
             <div className="empty-state">
-              <p>No camps match those filters. Loosen the search and try again.</p>
+              <p>
+                No camps match those filters. Loosen the search above the map
+                and try again.
+              </p>
             </div>
           ) : (
             <div className="camp-grid">

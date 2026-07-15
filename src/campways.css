@@ -214,41 +214,83 @@
 /* Main browse layout */
 .browse {
   display: grid;
-  grid-template-columns: minmax(240px, 280px) 1fr;
+  grid-template-columns: 1fr;
   gap: 0;
-  min-height: 70vh;
+  min-height: 40vh;
   scroll-margin-top: var(--header-h);
 }
 
-@media (max-width: 900px) {
-  .browse {
-    grid-template-columns: 1fr;
-  }
+.browse-results-only .results {
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
 
+@media (max-width: 900px) {
   .nav-links {
     display: none;
   }
 }
 
 .filters {
-  position: sticky;
-  top: var(--header-h);
-  align-self: start;
-  max-height: calc(100vh - var(--header-h));
-  overflow: auto;
-  padding: 1.5rem 1.25rem 2rem;
-  border-right: 1px solid var(--line);
-  background: rgba(247, 242, 234, 0.75);
+  padding: 1rem 1.15rem 1.15rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(247, 242, 234, 0.92);
+}
+
+.map-filters {
+  margin-bottom: 1.25rem;
+}
+
+.map-filters-top {
+  display: grid;
+  grid-template-columns: minmax(12rem, 2fr) repeat(4, minmax(7rem, 1fr));
+  gap: 0.75rem 1rem;
+  margin-bottom: 0.35rem;
+}
+
+.map-filters-search {
+  grid-column: span 1;
 }
 
 @media (max-width: 900px) {
-  .filters {
-    position: relative;
-    top: 0;
-    max-height: none;
-    border-right: none;
-    border-bottom: 1px solid var(--line);
+  .map-filters-top {
+    grid-template-columns: 1fr 1fr;
   }
+
+  .map-filters-search {
+    grid-column: 1 / -1;
+  }
+}
+
+.map-filters .filter-group {
+  margin-bottom: 0.85rem;
+}
+
+.map-filters-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.map-filters-count {
+  margin: 0 0 0 0.35rem;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
+.map-filters-count span {
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.clear-filters-inline {
+  width: auto;
+  margin-top: 0;
+  padding: 0.35rem 0.75rem;
 }
 
 .filters h2 {
@@ -681,12 +723,12 @@
 }
 
 .map-section-landing {
-  min-height: calc(100vh - var(--header-h) - 2rem);
+  min-height: auto;
 }
 
 .map-section-header {
-  max-width: 36rem;
-  margin-bottom: 1.5rem;
+  max-width: 40rem;
+  margin-bottom: 1rem;
 }
 
 .map-section-header h2 {
