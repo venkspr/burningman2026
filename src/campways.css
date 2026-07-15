@@ -429,10 +429,73 @@
   font-size: 0.85rem;
 }
 
+.results-page-meta {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
 .camp-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
   gap: 1rem;
+}
+
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 1.75rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+}
+
+.pagination-pages {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.pagination-btn {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--surface-solid);
+  color: var(--ink-soft);
+  padding: 0.45rem 0.8rem;
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
+.pagination-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pagination-num {
+  min-width: 2.25rem;
+  padding-inline: 0.5rem;
+}
+
+.pagination-num.is-active {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #fff;
+}
+
+.pagination-ellipsis {
+  color: var(--muted);
+  padding: 0 0.2rem;
+  font-size: 0.85rem;
 }
 
 .camp-card {
@@ -779,6 +842,11 @@
 
 .city-map-stage {
   position: relative;
+  /* Always square: max-height alone left a wide box; SVG letterboxed while HTML pins did not */
+  width: min(100%, min(72vh, 680px));
+  aspect-ratio: 1 / 1;
+  height: auto;
+  margin-inline: auto;
   border: 1px solid var(--line);
   background:
     radial-gradient(ellipse at 50% 38%, rgba(196, 92, 38, 0.1), transparent 50%),
@@ -786,8 +854,6 @@
     linear-gradient(165deg, #efe6d6 0%, #e4d7c2 100%);
   overflow: hidden;
   isolation: isolate;
-  aspect-ratio: 1 / 1;
-  max-height: min(72vh, 680px);
   cursor: default;
   user-select: none;
 }
@@ -806,11 +872,22 @@
   transform: none;
 }
 
-.brc-art {
+.brc-art,
+.brc-pin-layer {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   display: block;
+}
+
+.brc-art {
   pointer-events: none;
+}
+
+.brc-pin-layer {
+  z-index: 2;
+  overflow: visible;
 }
 
 .brc-art-clock {
@@ -837,124 +914,59 @@
   text-transform: uppercase;
 }
 
-.map-pin-callout {
-  position: absolute;
-  z-index: 3;
-  transform: translate(-50%, -100%);
-  font-family: var(--font-display);
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  max-width: 11rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding: 0.3rem 0.55rem;
-  background: rgba(247, 242, 234, 0.95);
-  border: 1px solid var(--line);
-  color: var(--ink);
-  pointer-events: none;
-  animation: rise-in 0.18s ease both;
-}
-
-.map-pin {
-  position: absolute;
-  z-index: 2;
-  width: 36px;
-  height: 36px;
-  margin: 0;
-  padding: 0;
-  transform: translate(-50%, -50%);
-  appearance: none;
-  border: none;
-  background: transparent;
+.map-pin-svg {
   cursor: pointer;
-  display: grid;
-  place-items: center;
+  outline: none;
 }
 
-.map-pin-halo {
-  position: absolute;
-  inset: 2px;
-  border-radius: 50%;
-  background: rgba(196, 92, 38, 0.22);
+.map-pin-svg-hit {
+  fill: transparent;
+}
+
+.map-pin-svg-halo {
+  fill: rgba(196, 92, 38, 0.28);
   opacity: 0;
-  transform: scale(0.6);
-  transition: opacity 0.2s ease, transform 0.2s ease;
   pointer-events: none;
 }
 
-.map-pin.is-hot .map-pin-halo {
+.map-pin-svg.is-hot .map-pin-svg-halo {
   opacity: 1;
-  transform: scale(1.55);
-  animation: pin-pulse 1.6s ease-out infinite;
 }
 
-@keyframes pin-pulse {
-  0% {
-    transform: scale(1);
-    opacity: 0.55;
-  }
-  70% {
-    transform: scale(1.85);
-    opacity: 0;
-  }
-  100% {
-    transform: scale(1.85);
-    opacity: 0;
-  }
+.map-pin-svg-dot {
+  fill: var(--ember);
+  stroke: #fff;
+  stroke-width: 0.35;
+  transition: fill 0.15s ease;
 }
 
-.map-pin-badge {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--ember);
-  color: #fff;
-  font-family: var(--font-display);
-  font-size: 0.82rem;
+.map-pin-svg.is-directory .map-pin-svg-dot {
+  fill: var(--teal-bright);
+}
+
+.map-pin-svg.is-approx .map-pin-svg-dot {
+  fill: var(--teal);
+}
+
+.map-pin-svg:hover .map-pin-svg-dot,
+.map-pin-svg:focus-visible .map-pin-svg-dot,
+.map-pin-svg.is-hot .map-pin-svg-dot {
+  fill: var(--ink);
+}
+
+.map-pin-svg-callout-bg {
+  fill: rgba(247, 242, 234, 0.95);
+  stroke: rgba(26, 23, 20, 0.18);
+  stroke-width: 0.2;
+}
+
+.map-pin-svg-callout-text {
+  fill: var(--ink);
+  font-family: Anybody, system-ui, sans-serif;
+  font-size: 2.1px;
   font-weight: 800;
-  letter-spacing: -0.02em;
-  border: 2px solid #fff;
-  box-shadow: 0 3px 10px rgba(26, 23, 20, 0.28);
-  transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
-}
-
-.city-map-stage.is-dense .map-pin {
-  width: 18px;
-  height: 18px;
-}
-
-.city-map-stage.is-dense .map-pin-badge {
-  width: 12px;
-  height: 12px;
-  border-width: 1.5px;
-  font-size: 0;
-}
-
-.map-pin.is-directory .map-pin-badge {
-  background: var(--teal-bright);
-}
-
-.map-pin.is-approx .map-pin-badge {
-  background: var(--teal);
-}
-
-.map-pin:hover .map-pin-badge,
-.map-pin:focus-visible .map-pin-badge {
-  transform: scale(1.12);
-  background: var(--ink);
-}
-
-.map-pin.is-hot .map-pin-badge {
-  background: var(--ink);
-  transform: scale(1.18);
-  box-shadow: 0 4px 16px rgba(26, 23, 20, 0.35);
+  letter-spacing: 0.03px;
+  text-transform: uppercase;
 }
 
 .city-map-side {

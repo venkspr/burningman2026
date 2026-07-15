@@ -28,6 +28,11 @@ export function CityMap({ camps, onOpenCamp }: Props) {
 
   const focusMarker = (m: MapMarker) => setSelectedId(m.camp.id);
 
+  const calloutX = selected
+    ? Math.min(Math.max(selected.x, 18), 82)
+    : 50;
+  const calloutY = selected ? Math.max(selected.y - 4.5, 6) : 0;
+
   return (
     <div className="city-map">
       <div className="city-map-layout">
@@ -36,42 +41,74 @@ export function CityMap({ camps, onOpenCamp }: Props) {
             <div className="city-map-world city-map-world-static">
               <BrcArtMap />
 
-              {markers.map((m) => {
-                const hot = effectiveId === m.camp.id;
-                return (
-                  <button
-                    key={m.camp.id}
-                    type="button"
-                    className={`map-pin ${hot ? "is-hot" : ""} ${
-                      m.placement.approximate ? "is-approx" : ""
-                    } ${
-                      m.camp.placementSource === "directory"
-                        ? "is-directory"
-                        : ""
-                    }`}
-                    style={{ left: `${m.x}%`, top: `${m.y}%` }}
-                    aria-label={`${m.camp.name} at ${m.placement.label}`}
-                    aria-pressed={hot}
-                    onClick={() => focusMarker(m)}
-                    title={`${m.camp.name} — ${m.placement.label}`}
-                  >
-                    <span className="map-pin-halo" aria-hidden />
-                    <span className="map-pin-badge" />
-                  </button>
-                );
-              })}
+              {/* Same viewBox + meet as the art map so pins track the map at any width */}
+              <svg
+                className="brc-pin-layer"
+                viewBox="0 0 100 100"
+                preserveAspectRatio="xMidYMid meet"
+                role="group"
+                aria-label="Camp locations on the map"
+              >
+                {markers.map((m) => {
+                  const hot = effectiveId === m.camp.id;
+                  const kind =
+                    m.camp.placementSource === "directory"
+                      ? "directory"
+                      : m.placement.approximate
+                        ? "approx"
+                        : "sheet";
+                  return (
+                    <g
+                      key={m.camp.id}
+                      className={`map-pin-svg ${hot ? "is-hot" : ""} is-${kind}`}
+                      transform={`translate(${m.x} ${m.y})`}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`${m.camp.name} at ${m.placement.label}`}
+                      aria-pressed={hot}
+                      onClick={() => focusMarker(m)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          focusMarker(m);
+                        }
+                      }}
+                    >
+                      <title>{`${m.camp.name} — ${m.placement.label}`}</title>
+                      <circle className="map-pin-svg-halo" r="2.4" />
+                      <circle className="map-pin-svg-hit" r="2.1" />
+                      <circle className="map-pin-svg-dot" r="1.05" />
+                    </g>
+                  );
+                })}
 
-              {selected && (
-                <div
-                  className="map-pin-callout"
-                  style={{
-                    left: `${Math.min(Math.max(selected.x, 22), 78)}%`,
-                    top: `${Math.max(selected.y - 7, 6)}%`,
-                  }}
-                >
-                  {selected.camp.name}
-                </div>
-              )}
+                {selected && (
+                  <g
+                    className="map-pin-svg-callout"
+                    transform={`translate(${calloutX} ${calloutY})`}
+                    pointerEvents="none"
+                  >
+                    <rect
+                      className="map-pin-svg-callout-bg"
+                      x={-14}
+                      y={-3.2}
+                      width={28}
+                      height={4.4}
+                      rx={0.6}
+                    />
+                    <text
+                      className="map-pin-svg-callout-text"
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      y={-1}
+                    >
+                      {selected.camp.name.length > 28
+                        ? `${selected.camp.name.slice(0, 27)}…`
+                        : selected.camp.name}
+                    </text>
+                  </g>
+                )}
+              </svg>
             </div>
           </div>
           <p className="city-map-hint">
@@ -177,4 +214,3 @@ export function CityMap({ camps, onOpenCamp }: Props) {
     </div>
   );
 }
-

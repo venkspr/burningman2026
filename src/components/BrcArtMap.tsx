@@ -38,6 +38,7 @@ export function BrcArtMap() {
       viewBox="0 0 100 100"
       preserveAspectRatio="xMidYMid meet"
       aria-hidden
+      focusable="false"
     >
       <defs>
         <radialGradient id="playa-glow" cx="50%" cy="42%" r="58%">

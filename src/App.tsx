@@ -8,6 +8,7 @@ import { CityMap } from "./components/CityMap";
 import "./App.css";
 
 const camps = campsData as Camp[];
+const PAGE_SIZE = 24;
 
 type SortKey = "name" | "dues-asc" | "dues-desc" | "size-asc" | "size-desc";
 
@@ -30,7 +31,7 @@ const defaultFilters: Filters = {
   maxDues: "",
   maxSize: "",
   placementOnly: false,
-  acceptingOnly: true,
+  acceptingOnly: false,
 };
 
 function matchesQuery(camp: Camp, q: string): boolean {
@@ -77,6 +78,7 @@ function sortCamps(list: Camp[], sort: SortKey): Camp[] {
 export default function App() {
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [sort, setSort] = useState<SortKey>("name");
+  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Camp | null>(null);
 
   const placedCamps = useMemo(
@@ -128,6 +130,21 @@ export default function App() {
     () => filtered.filter((c) => c.placement.trim().length > 0),
     [filtered],
   );
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount);
+  const pageItems = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE;
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, safePage]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filters, sort]);
+
+  useEffect(() => {
+    if (page > pageCount) setPage(pageCount);
+  }, [page, pageCount]);
 
   useEffect(() => {
     if (!selected) return;
@@ -364,6 +381,13 @@ export default function App() {
             <h2 className="results-count">
               <span>{filtered.length}</span> camps matching filters
             </h2>
+            {filtered.length > 0 && (
+              <p className="results-page-meta">
+                Showing {(safePage - 1) * PAGE_SIZE + 1}–
+                {Math.min(safePage * PAGE_SIZE, filtered.length)} of{" "}
+                {filtered.length}
+              </p>
+            )}
           </div>
 
           {filtered.length === 0 ? (
@@ -374,16 +398,93 @@ export default function App() {
               </p>
             </div>
           ) : (
-            <div className="camp-grid">
-              {filtered.map((camp) => (
-                <CampCard
-                  key={camp.id}
-                  camp={camp}
-                  active={selected?.id === camp.id}
-                  onSelect={setSelected}
-                />
-              ))}
-            </div>
+            <>
+              <div className="camp-grid">
+                {pageItems.map((camp) => (
+                  <CampCard
+                    key={camp.id}
+                    camp={camp}
+                    active={selected?.id === camp.id}
+                    onSelect={setSelected}
+                  />
+                ))}
+              </div>
+
+              {pageCount > 1 && (
+                <nav className="pagination" aria-label="Camp list pages">
+                  <button
+                    type="button"
+                    className="pagination-btn"
+                    disabled={safePage <= 1}
+                    onClick={() => {
+                      setPage((p) => Math.max(1, p - 1));
+                      document
+                        .getElementById("browse")
+                        ?.scrollIntoView({ behavior: "smooth" });
+                    }}
+                  >
+                    Previous
+                  </button>
+
+                  <div className="pagination-pages">
+                    {Array.from({ length: pageCount }, (_, i) => i + 1)
+                      .filter((n) => {
+                        if (pageCount <= 7) return true;
+                        if (n === 1 || n === pageCount) return true;
+                        return Math.abs(n - safePage) <= 1;
+                      })
+                      .reduce<(number | "…")[]>((acc, n, idx, arr) => {
+                        if (idx > 0) {
+                          const prev = arr[idx - 1];
+                          if (n - prev > 1) acc.push("…");
+                        }
+                        acc.push(n);
+                        return acc;
+                      }, [])
+                      .map((item, idx) =>
+                        item === "…" ? (
+                          <span key={`e-${idx}`} className="pagination-ellipsis">
+                            …
+                          </span>
+                        ) : (
+                          <button
+                            key={item}
+                            type="button"
+                            className={`pagination-btn pagination-num ${
+                              item === safePage ? "is-active" : ""
+                            }`}
+                            aria-current={
+                              item === safePage ? "page" : undefined
+                            }
+                            onClick={() => {
+                              setPage(item);
+                              document
+                                .getElementById("browse")
+                                ?.scrollIntoView({ behavior: "smooth" });
+                            }}
+                          >
+                            {item}
+                          </button>
+                        ),
+                      )}
+                  </div>
+
+                  <button
+                    type="button"
+                    className="pagination-btn"
+                    disabled={safePage >= pageCount}
+                    onClick={() => {
+                      setPage((p) => Math.min(pageCount, p + 1));
+                      document
+                        .getElementById("browse")
+                        ?.scrollIntoView({ behavior: "smooth" });
+                    }}
+                  >
+                    Next
+                  </button>
+                </nav>
+              )}
+            </>
           )}
         </main>
       </div>
