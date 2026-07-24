@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Camp } from "../data/types";
 import { campsToMarkers, type MapMarker } from "../data/brcMap";
 import {
@@ -7,6 +7,7 @@ import {
   formatSize,
   truncate,
 } from "../data/utils";
+import { compactText } from "../data/nlSearch";
 import { BrcArtMap } from "./BrcArtMap";
 
 type Props = {
@@ -14,9 +15,29 @@ type Props = {
   onOpenCamp: (camp: Camp) => void;
 };
 
+type RosterGroup = "clock" | "alpha";
+
+const HOUR_JUMPS = [2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
+
+function clockBucket(m: MapMarker): string {
+  if (m.placement.centerCamp) return "Center Camp";
+  const h = m.placement.hour;
+  // Snap to nearest hour label used in BRC (2–10)
+  const snapped = Math.min(10, Math.max(2, h === 12 || h === 1 ? 2 : h));
+  return `${snapped}:00`;
+}
+
+function clockSortKey(m: MapMarker): number {
+  if (m.placement.centerCamp) return 6 * 60 + 30;
+  return m.placement.hour * 60 + m.placement.minute;
+}
+
 export function CityMap({ camps, onOpenCamp }: Props) {
   const markers = useMemo(() => campsToMarkers(camps), [camps]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [rosterQuery, setRosterQuery] = useState("");
+  const [groupBy, setGroupBy] = useState<RosterGroup>("clock");
+  const listRef = useRef<HTMLDivElement>(null);
 
   const selected: MapMarker | null =
     markers.find((m) => m.camp.id === selectedId) ??
@@ -26,7 +47,79 @@ export function CityMap({ camps, onOpenCamp }: Props) {
   const effectiveId = selected?.camp.id ?? null;
   const site = selected ? ensureUrl(selected.camp.website) : "";
 
-  const focusMarker = (m: MapMarker) => setSelectedId(m.camp.id);
+  const focusMarker = (m: MapMarker) => {
+    setSelectedId(m.camp.id);
+    // Scroll roster row into view
+    requestAnimationFrame(() => {
+      listRef.current
+        ?.querySelector(`[data-camp-id="${m.camp.id}"]`)
+        ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+  };
+
+  const filteredMarkers = useMemo(() => {
+    const q = rosterQuery.trim().toLowerCase();
+    if (!q) return markers;
+    const compactQ = compactText(q);
+    return markers.filter((m) => {
+      const hay = `${m.camp.name} ${m.placement.label}`.toLowerCase();
+      const compactHay = compactText(hay);
+      if (compactQ.length >= 3 && compactHay.includes(compactQ)) return true;
+      const normalized = q.replace(/[-_./]+/g, " ");
+      return normalized.split(/\s+/).every(
+        (t) => hay.includes(t) || compactHay.includes(compactText(t)),
+      );
+    });
+  }, [markers, rosterQuery]);
+
+  const grouped = useMemo(() => {
+    if (groupBy === "alpha") {
+      const sorted = [...filteredMarkers].sort((a, b) =>
+        a.camp.name.localeCompare(b.camp.name),
+      );
+      const buckets = new Map<string, MapMarker[]>();
+      for (const m of sorted) {
+        const letter = (m.camp.name[0] ?? "#").toUpperCase();
+        const key = /[A-Z]/.test(letter) ? letter : "#";
+        const list = buckets.get(key) ?? [];
+        list.push(m);
+        buckets.set(key, list);
+      }
+      return [...buckets.entries()];
+    }
+
+    const sorted = [...filteredMarkers].sort(
+      (a, b) =>
+        clockSortKey(a) - clockSortKey(b) ||
+        a.camp.name.localeCompare(b.camp.name),
+    );
+    const buckets = new Map<string, MapMarker[]>();
+    for (const m of sorted) {
+      const key = clockBucket(m);
+      const list = buckets.get(key) ?? [];
+      list.push(m);
+      buckets.set(key, list);
+    }
+    return [...buckets.entries()];
+  }, [filteredMarkers, groupBy]);
+
+  const jumpToHour = (hour: number) => {
+    setGroupBy("clock");
+    setRosterQuery("");
+    requestAnimationFrame(() => {
+      listRef.current
+        ?.querySelector(`[data-hour-group="${hour}:00"]`)
+        ?.scrollIntoView({ block: "start", behavior: "smooth" });
+    });
+  };
+
+  // Keep selection valid when filter changes
+  useEffect(() => {
+    if (!selectedId) return;
+    if (!markers.some((m) => m.camp.id === selectedId)) {
+      setSelectedId(markers[0]?.camp.id ?? null);
+    }
+  }, [markers, selectedId]);
 
   const calloutX = selected
     ? Math.min(Math.max(selected.x, 18), 82)
@@ -41,7 +134,6 @@ export function CityMap({ camps, onOpenCamp }: Props) {
             <div className="city-map-world city-map-world-static">
               <BrcArtMap />
 
-              {/* Same viewBox + meet as the art map so pins track the map at any width */}
               <svg
                 className="brc-pin-layer"
                 viewBox="0 0 100 100"
@@ -56,7 +148,9 @@ export function CityMap({ camps, onOpenCamp }: Props) {
                       ? "directory"
                       : m.placement.approximate
                         ? "approx"
-                        : "sheet";
+                        : m.camp.placementSource === "official"
+                          ? "sheet"
+                          : "sheet";
                   return (
                     <g
                       key={m.camp.id}
@@ -112,8 +206,8 @@ export function CityMap({ camps, onOpenCamp }: Props) {
             </div>
           </div>
           <p className="city-map-hint">
-            {markers.length} camps pinned. Click a dot for the name — 2026
-            placement addresses where available.
+            {markers.length} camps pinned. Use the address guide to jump by
+            clock time — click a row to light the pin.
           </p>
         </div>
 
@@ -184,30 +278,99 @@ export function CityMap({ camps, onOpenCamp }: Props) {
           )}
 
           <div className="map-roster">
-            <h3 className="map-roster-title">
-              On the map <span>{markers.length}</span>
-            </h3>
-            <ul className="map-roster-list">
-              {markers.map((m) => (
-                <li key={m.camp.id}>
+            <div className="map-roster-header">
+              <h3 className="map-roster-title">
+                Address guide <span>{filteredMarkers.length}</span>
+              </h3>
+              <label className="map-roster-search">
+                <span className="visually-hidden">Search addresses</span>
+                <input
+                  type="search"
+                  placeholder="Search name or address…"
+                  value={rosterQuery}
+                  onChange={(e) => setRosterQuery(e.target.value)}
+                />
+              </label>
+              <div className="map-roster-tools">
+                <div className="map-roster-group-toggle" role="group" aria-label="Group by">
                   <button
                     type="button"
-                    className={`map-roster-item ${
-                      effectiveId === m.camp.id ? "is-active" : ""
-                    }`}
-                    onClick={() => focusMarker(m)}
+                    className={groupBy === "clock" ? "is-active" : ""}
+                    onClick={() => setGroupBy("clock")}
                   >
-                    <span className="map-roster-num" aria-hidden>
-                      •
-                    </span>
-                    <span className="map-roster-text">
-                      <span className="map-roster-name">{m.camp.name}</span>
-                      <span className="map-roster-loc">{m.placement.label}</span>
-                    </span>
+                    By clock
                   </button>
-                </li>
-              ))}
-            </ul>
+                  <button
+                    type="button"
+                    className={groupBy === "alpha" ? "is-active" : ""}
+                    onClick={() => setGroupBy("alpha")}
+                  >
+                    A–Z
+                  </button>
+                </div>
+              </div>
+              {groupBy === "clock" && (
+                <div className="map-roster-jumps" aria-label="Jump to clock hour">
+                  {HOUR_JUMPS.map((h) => (
+                    <button
+                      key={h}
+                      type="button"
+                      className="map-roster-jump"
+                      onClick={() => jumpToHour(h)}
+                    >
+                      {h}:00
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="map-roster-scroll" ref={listRef}>
+              {filteredMarkers.length === 0 ? (
+                <p className="map-roster-empty">
+                  No addresses match “{rosterQuery}”.
+                </p>
+              ) : (
+                grouped.map(([label, items]) => (
+                  <section
+                    key={label}
+                    className="map-roster-group"
+                    data-hour-group={label}
+                  >
+                    <h4 className="map-roster-group-title">
+                      {label}
+                      <span>{items.length}</span>
+                    </h4>
+                    <ul className="map-roster-list">
+                      {items.map((m) => (
+                        <li key={m.camp.id}>
+                          <button
+                            type="button"
+                            data-camp-id={m.camp.id}
+                            className={`map-roster-item ${
+                              effectiveId === m.camp.id ? "is-active" : ""
+                            }`}
+                            onClick={() => focusMarker(m)}
+                          >
+                            <span className="map-roster-num" aria-hidden>
+                              •
+                            </span>
+                            <span className="map-roster-text">
+                              <span className="map-roster-name">
+                                {m.camp.name}
+                              </span>
+                              <span className="map-roster-loc">
+                                {m.placement.label}
+                              </span>
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ))
+              )}
+            </div>
           </div>
         </aside>
       </div>

@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import campsData from "./data/camps.json";
 import type { Camp, CampAmenities, ScholarshipValue } from "./data/types";
+import {
+  interpretQuery,
+  matchesNameQuery,
+  matchesNearCamp,
+  matchesNlPlacement,
+  NL_EXAMPLES,
+  scoreCamp,
+  compactText,
+} from "./data/nlSearch";
 import { AMENITY_LABELS, TAG_OPTIONS } from "./data/utils";
 import { CampCard } from "./components/CampCard";
 import { CampDetail } from "./components/CampDetail";
@@ -10,7 +19,13 @@ import "./App.css";
 const camps = campsData as Camp[];
 const PAGE_SIZE = 24;
 
-type SortKey = "name" | "dues-asc" | "dues-desc" | "size-asc" | "size-desc";
+type SortKey =
+  | "relevance"
+  | "name"
+  | "dues-asc"
+  | "dues-desc"
+  | "size-asc"
+  | "size-desc";
 
 type Filters = {
   query: string;
@@ -36,6 +51,8 @@ const defaultFilters: Filters = {
 
 function matchesQuery(camp: Camp, q: string): boolean {
   if (!q) return true;
+  if (matchesNameQuery(camp, q)) return true;
+  const normalized = q.replace(/[-_./]+/g, " ");
   const hay = [
     camp.name,
     camp.description,
@@ -48,16 +65,33 @@ function matchesQuery(camp: Camp, q: string): boolean {
   ]
     .join(" ")
     .toLowerCase();
-  return q
+  const compactHay = compactText(hay);
+  return normalized
     .toLowerCase()
     .split(/\s+/)
     .filter(Boolean)
-    .every((token) => hay.includes(token));
+    .every(
+      (token) => hay.includes(token) || compactHay.includes(compactText(token)),
+    );
 }
 
-function sortCamps(list: Camp[], sort: SortKey): Camp[] {
+function sortCamps(
+  list: Camp[],
+  sort: SortKey,
+  residualQuery: string,
+  nlFilters: ReturnType<typeof interpretQuery>["filters"],
+  rawQuery: string,
+  allCamps: Camp[],
+): Camp[] {
   const copy = [...list];
   switch (sort) {
+    case "relevance":
+      return copy.sort(
+        (a, b) =>
+          scoreCamp(b, residualQuery, nlFilters, rawQuery, allCamps) -
+            scoreCamp(a, residualQuery, nlFilters, rawQuery, allCamps) ||
+          a.name.localeCompare(b.name),
+      );
     case "dues-asc":
       return copy.sort(
         (a, b) => (a.duesMin ?? 99999) - (b.duesMin ?? 99999),
@@ -77,54 +111,140 @@ function sortCamps(list: Camp[], sort: SortKey): Camp[] {
 
 export default function App() {
   const [filters, setFilters] = useState<Filters>(defaultFilters);
-  const [sort, setSort] = useState<SortKey>("name");
+  const [sort, setSort] = useState<SortKey>("relevance");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Camp | null>(null);
 
-  const placedCamps = useMemo(
-    () => camps.filter((c) => c.placement.trim().length > 0),
-    [],
+  const nl = useMemo(
+    () => interpretQuery(filters.query, camps),
+    [filters.query],
   );
 
   const filtered = useMemo(() => {
-    const maxDues = filters.maxDues ? Number(filters.maxDues) : null;
-    const maxSize = filters.maxSize ? Number(filters.maxSize) : null;
+    const amenity = filters.amenity || nl.filters.amenity;
+    const scholarship = filters.scholarship || nl.filters.scholarship;
+    const tag = filters.tag || nl.filters.tag;
+    const maxDuesStr = filters.maxDues || nl.filters.maxDues;
+    const maxSizeStr = filters.maxSize || nl.filters.maxSize;
+    const acceptingOnly =
+      filters.acceptingOnly || nl.filters.acceptingOnly;
+    const placementOnly =
+      filters.placementOnly ||
+      nl.filters.placementOnly ||
+      Boolean(
+        nl.filters.clockHint ||
+          nl.filters.streetHint ||
+          nl.filters.nearCampId,
+      );
+    const nearActive = Boolean(nl.filters.nearCampId);
+
+    const maxDues = maxDuesStr ? Number(maxDuesStr) : null;
+    const maxSize = maxSizeStr ? Number(maxSizeStr) : null;
 
     const list = camps.filter((camp) => {
-      if (!matchesQuery(camp, filters.query)) return false;
+      const nameHit =
+        !nearActive &&
+        Boolean(filters.query.trim()) &&
+        matchesNameQuery(camp, filters.query);
 
-      if (filters.acceptingOnly && !camp.acceptingCampers) return false;
+      // Direct name hits (soundgarden → The Sound Garden) bypass NL vibe/amenity guesses
+      if (nameHit) {
+        if (filters.acceptingOnly && !camp.acceptingCampers) return false;
+        if (filters.amenity) {
+          const v = camp.amenities[filters.amenity];
+          if (v !== "communal" && v !== "both") return false;
+        }
+        if (filters.scholarship && camp.scholarship !== filters.scholarship) {
+          return false;
+        }
+        if (
+          filters.tag &&
+          !camp.tags.map((t) => t.toLowerCase()).includes(filters.tag)
+        ) {
+          return false;
+        }
+        if (filters.maxDues) {
+          const maxDues = Number(filters.maxDues);
+          if (!Number.isNaN(maxDues)) {
+            if (maxDues === 0) {
+              if (camp.duesMin != null && camp.duesMin > 0) return false;
+            } else if (camp.duesMin == null || camp.duesMin > maxDues) {
+              return false;
+            }
+          }
+        }
+        if (filters.maxSize) {
+          const maxSize = Number(filters.maxSize);
+          if (!Number.isNaN(maxSize) && camp.sizeMin > maxSize) return false;
+        }
+        if (filters.placementOnly && !camp.placement.trim()) return false;
+        return true;
+      }
 
-      if (filters.amenity) {
-        const v = camp.amenities[filters.amenity];
+      if (!matchesQuery(camp, nl.residualQuery)) return false;
+      if (!matchesNlPlacement(camp, nl.filters)) return false;
+      if (!matchesNearCamp(camp, nl.filters, camps)) return false;
+
+      if (acceptingOnly && !camp.acceptingCampers) return false;
+
+      if (amenity) {
+        const v = camp.amenities[amenity];
         if (v !== "communal" && v !== "both") return false;
       }
 
-      if (filters.scholarship) {
-        if (camp.scholarship !== filters.scholarship) return false;
+      if (scholarship) {
+        if (camp.scholarship !== scholarship) return false;
       }
 
-      if (filters.tag) {
-        if (!camp.tags.map((t) => t.toLowerCase()).includes(filters.tag)) {
+      if (tag) {
+        const campTags = camp.tags.map((t) => t.toLowerCase());
+        if (tag === "food") {
+          // "food camps" = food vibe, food amenity, or food-y name/blurb
+          const foodAmenity =
+            camp.amenities.food === "communal" ||
+            camp.amenities.food === "both" ||
+            camp.amenities.kitchen === "communal" ||
+            camp.amenities.kitchen === "both";
+          const foodText = /food|kitchen|meal|brunch|breakfast|dinner|cafe|café|crepe|pizza|taco|grill|bakery|restaurant|tea house|teahouse/i.test(
+            `${camp.name} ${camp.description}`,
+          );
+          if (!campTags.includes("food") && !foodAmenity && !foodText) {
+            return false;
+          }
+        } else if (!campTags.includes(tag)) {
           return false;
         }
       }
 
       if (maxDues != null && !Number.isNaN(maxDues)) {
-        if (camp.duesMin == null || camp.duesMin > maxDues) return false;
+        if (maxDues === 0) {
+          if (camp.duesMin != null && camp.duesMin > 0) return false;
+        } else if (camp.duesMin == null || camp.duesMin > maxDues) {
+          return false;
+        }
       }
 
       if (maxSize != null && !Number.isNaN(maxSize)) {
         if (camp.sizeMin > maxSize) return false;
       }
 
-      if (filters.placementOnly && !camp.placement.trim()) return false;
+      if (placementOnly && !camp.placement.trim()) return false;
 
       return true;
     });
 
-    return sortCamps(list, sort);
-  }, [filters, sort]);
+    const effectiveSort =
+      sort === "relevance" && !filters.query.trim() ? "name" : sort;
+
+    return sortCamps(
+      list,
+      effectiveSort,
+      nl.residualQuery,
+      nl.filters,
+      filters.query,
+      camps,
+    );
+  }, [filters, sort, nl]);
 
   const mapCamps = useMemo(
     () => filtered.filter((c) => c.placement.trim().length > 0),
@@ -187,17 +307,51 @@ export default function App() {
         </div>
 
         <aside className="filters map-filters" aria-label="Camp filters">
-          <div className="map-filters-top">
-            <div className="filter-group map-filters-search">
-              <label htmlFor="search">Search</label>
-              <input
-                id="search"
-                type="search"
-                placeholder="slushies, queer, Reno…"
-                value={filters.query}
-                onChange={(e) => update("query", e.target.value)}
-              />
+          <div className="filter-group map-filters-search map-filters-search-nl">
+            <label htmlFor="search">Ask in plain English</label>
+            <input
+              id="search"
+              type="search"
+              placeholder='e.g. “queer camp with showers under $400 near 7:00”'
+              value={filters.query}
+              onChange={(e) => {
+                update("query", e.target.value);
+                setSort("relevance");
+              }}
+            />
+            {nl.insights.length > 0 && (
+              <div className="nl-insights" aria-live="polite">
+                <span className="nl-insights-label">Understood</span>
+                {nl.insights.map((insight) => (
+                  <span key={insight} className="nl-insight-chip">
+                    {insight}
+                  </span>
+                ))}
+                {nl.residualQuery ? (
+                  <span className="nl-insight-chip nl-insight-residual">
+                    keywords: {nl.residualQuery}
+                  </span>
+                ) : null}
+              </div>
+            )}
+            <div className="nl-examples">
+              {NL_EXAMPLES.map((ex) => (
+                <button
+                  key={ex}
+                  type="button"
+                  className="nl-example"
+                  onClick={() => {
+                    update("query", ex);
+                    setSort("relevance");
+                  }}
+                >
+                  {ex}
+                </button>
+              ))}
             </div>
+          </div>
+
+          <div className="map-filters-top">
             <div className="filter-group">
               <span className="filter-label">Camp supplies</span>
               <select
@@ -246,6 +400,7 @@ export default function App() {
                 value={sort}
                 onChange={(e) => setSort(e.target.value as SortKey)}
               >
+                <option value="relevance">Best match</option>
                 <option value="name">A–Z</option>
                 <option value="dues-asc">Dues ↑</option>
                 <option value="dues-desc">Dues ↓</option>
@@ -337,28 +492,6 @@ export default function App() {
         </aside>
 
         <CityMap camps={mapCamps} onOpenCamp={setSelected} />
-
-        {placedCamps.length > 0 && filters.acceptingOnly === false && (
-          <div className="map-placed">
-            <h3>All known addresses ({placedCamps.length})</h3>
-            <ul className="placed-list">
-              {placedCamps.slice(0, 40).map((camp) => (
-                <li key={camp.id}>
-                  <button type="button" onClick={() => setSelected(camp)}>
-                    <span>{camp.name}</span>
-                    <span className="placed-loc">{camp.placement}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-            {placedCamps.length > 40 && (
-              <p className="city-map-hint">
-                Showing 40 of {placedCamps.length} — use search/filters for the
-                rest.
-              </p>
-            )}
-          </div>
-        )}
       </section>
 
       <p className="disclaimer">
