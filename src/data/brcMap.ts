@@ -59,8 +59,11 @@ function parseLooseClock(text: string): { hour: number; minute: number } | null 
 }
 
 function parseStreetKey(text: string): string {
+  // Esplanade abbreviations used in official pins: Esp / ESP
+  if (/\besp(?:lanade)?\b/i.test(text)) return "esplanade";
+
   const named = text.match(
-    /\b(esplanade|ararat|bodhi|chomolungma|delphi|eternal|fulcrum|great oak|heiau|iroko|jiba|kundalini)\b/i,
+    /\b(ararat|bodhi|chomolungma|delphi|eternal|fulcrum|great oak|heiau|iroko|jiba|kundalini)\b/i,
   );
   if (named) return named[1].toLowerCase();
 
@@ -68,8 +71,12 @@ function parseStreetKey(text: string): string {
   const beforePlaza = text.match(/\b([A-Ka-k])\s*plaza\b/i);
   if (beforePlaza) return beforePlaza[1].toLowerCase();
 
+  // "7:30 & G@ 10:30" — street glued to @
+  const beforeAt = text.match(/\b([A-Ka-k])\s*@/i);
+  if (beforeAt) return beforeAt[1].toLowerCase();
+
   const letter = text.match(
-    /(?:^|[\s,&@]|at\s+)([A-Ka-k])(?:\s|$|&|,|plaza)/i,
+    /(?:^|[\s,&@]|at\s+)([A-Ka-k])(?:\s|$|&|,|plaza|@)/i,
   );
   if (letter) return letter[1].toLowerCase();
 
@@ -78,18 +85,19 @@ function parseStreetKey(text: string): string {
 }
 
 /**
- * Parse strings like "7:30 & B", "A & 2:15", "4:30 B Plaza @ 2:15".
+ * Parse strings like "7:30 & B", "A & 2:15", "4:30 B Plaza @ 2:15",
+ * "CC@ 9:30", "5:00 & Esp", "7:30 & G@ 10:30".
  *
- * Important: for "X:XX B Plaza @ Y:YY", X:XX is the plaza's city clock.
- * The @ time is a micro-position around that plaza — never the Man radial.
+ * Important: for "X:XX B Plaza @ Y:YY" / "X & G@ Y", X is the city clock.
+ * The @ time is a micro-position — never the Man radial.
  */
 export function parsePlacement(raw: string): ParsedPlacement | null {
   const text = raw.trim();
   if (!text) return null;
-  if (/airport|none listed/i.test(text)) return null;
+  if (/airport|none listed|epicenter/i.test(text)) return null;
 
-  // Center Camp — always near 6:00 / CC; @ time is around the plaza, not city clock
-  if (/center\s*camp/i.test(text)) {
+  // Center Camp — "CC@ 9:30", "Center Camp Plaza @ 8:00"
+  if (/\bcc\b|center\s*camp/i.test(text)) {
     const around = text.match(/@\s*(\d{1,2}):(\d{2})/);
     return {
       hour: around ? normalizeHour(Number(around[1])) : 6,
@@ -119,8 +127,9 @@ export function parsePlacement(raw: string): ParsedPlacement | null {
 
   const streetKey = parseStreetKey(text);
   const isPlaza = /\bplaza\b/i.test(text);
+  const hasStreetAt = /\b[A-Ka-k]\s*@/i.test(text);
 
-  // Plaza city address is the clock *before* "Plaza", not the @ micro-time
+  // City clock is the first time; ignore trailing @ micro-time for radials
   let clock: { hour: number; minute: number } | null = null;
   if (isPlaza) {
     const beforePlaza = text.match(
@@ -134,7 +143,29 @@ export function parsePlacement(raw: string): ParsedPlacement | null {
     }
   }
 
+  if (!clock && hasStreetAt) {
+    // "7:30 & G@ 10:30" → use 7:30
+    const first = text.match(/(\d{1,2}):(\d{2})/);
+    if (first) {
+      clock = {
+        hour: normalizeHour(Number(first[1])),
+        minute: Number(first[2]),
+      };
+    }
+  }
+
   if (!clock) clock = parseLooseClock(text);
+
+  // If parseLooseClock grabbed @ time first somehow, prefer clock before &
+  if (hasStreetAt) {
+    const beforeAmp = text.match(/(\d{1,2}):(\d{2})\s*&/);
+    if (beforeAmp) {
+      clock = {
+        hour: normalizeHour(Number(beforeAmp[1])),
+        minute: Number(beforeAmp[2]),
+      };
+    }
+  }
 
   if (!clock && streetKey === "esplanade") {
     return {
@@ -153,7 +184,7 @@ export function parsePlacement(raw: string): ParsedPlacement | null {
     minute: clock.minute,
     street: STREET_INDEX[streetKey],
     label: text,
-    approximate: isPlaza || undefined,
+    approximate: isPlaza || hasStreetAt || undefined,
   };
 }
 

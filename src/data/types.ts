@@ -2,7 +2,7 @@ export type AmenityValue = "communal" | "individual" | "both" | "na";
 
 export type ScholarshipValue = "yes" | "no" | "maybe";
 
-export type PlacementSource = "user" | "sheet" | "directory" | "";
+export type PlacementSource = "user" | "sheet" | "directory" | "official" | "";
 
 export interface CampAmenities {
   transport: AmenityValue;

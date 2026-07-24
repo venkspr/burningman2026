@@ -181,8 +181,8 @@ export default function App() {
           <h2>Black Rock City 2026</h2>
           <p>
             Search and filter first — pins update live ({mapCamps.length} with
-            addresses). Official 2026 placement data is not public yet — treat
-            pins as provisional.
+            addresses). Placements from the 2026 city layout; always confirm with
+            the camp.
           </p>
         </div>
 
@@ -370,8 +370,8 @@ export default function App() {
         >
           burningman.org
         </a>
-        ; addresses mostly from Playa Info (may be prior-year). Official 2026
-        pins ~Aug 23.{" "}
+        ; map pins use 2026 placement addresses where available. Always verify
+        with the camp before you go.{" "}
         <a href="mailto:placement@burningman.org">placement@burningman.org</a>
       </p>
 

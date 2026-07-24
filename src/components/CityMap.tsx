@@ -112,8 +112,8 @@ export function CityMap({ camps, onOpenCamp }: Props) {
             </div>
           </div>
           <p className="city-map-hint">
-            {markers.length} camps pinned. Click a dot for the name — addresses
-            from Playa Info / sheet may not be final 2026 placement.
+            {markers.length} camps pinned. Click a dot for the name — 2026
+            placement addresses where available.
           </p>
         </div>
 
